@@ -1,0 +1,17 @@
+# Virtual environment
+venv/
+
+# Vector database (too large, rebuilt with ingest.py)
+chroma_db/
+
+# API keys
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
