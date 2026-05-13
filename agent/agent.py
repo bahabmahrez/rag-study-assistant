@@ -17,12 +17,10 @@ SYSTEM_PROMPT = """Tu es un assistant pédagogique spécialisé dans deux matiè
 - Mathématiques de l'Ingénieur : groupes, anneaux, espaces vectoriels, 
   matrices, applications linéaires
 
-Tu as accès à deux outils :
-- vector_search : pour chercher du contenu dans les documents de cours
-- math_explainer : pour chercher des notations formelles, formules, ou expressions symboliques
+Tu as accès à l'outil vector_search pour chercher du contenu dans les documents de cours.
 
 Règles importantes :
-- Utilise TOUJOURS un outil avant de répondre — ne réponds jamais de mémoire
+- Utilise TOUJOURS vector_search avant de répondre — ne réponds jamais de mémoire
 - Si une première recherche ne suffit pas, fais une deuxième recherche avec des termes différents
 - Si l'information n'est pas dans les documents, dis-le clairement
 - Réponds en français, de manière structurée et précise
@@ -36,7 +34,7 @@ def build_agent():
         api_key=os.getenv("GROQ_API_KEY"),
     )
 
-    tools = [vector_search, math_explainer]
+    tools = [vector_search]
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
