@@ -1,64 +1,74 @@
 import os
 from dotenv import load_dotenv
-from groq import Groq
+from langchain_groq import ChatGroq
+
+from langchain.agents import AgentExecutor
+from langchain.agents.tool_calling_agent.base import create_tool_calling_agent
+
+from langchain_core.prompts import ChatPromptTemplate
+
 from agent.tools import vector_search, math_explainer
 
 load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+SYSTEM_PROMPT = """Tu es un assistant pédagogique spécialisé dans deux matières :
+- Théorie des Langages & Automates (TLA) : automates finis, langages réguliers, 
+  expressions régulières, minimisation, ε-transitions
+- Mathématiques de l'Ingénieur : groupes, anneaux, espaces vectoriels, 
+  matrices, applications linéaires
 
-SYSTEM_PROMPT = """Tu es un assistant pédagogique spécialisé dans les cours de 
-Théorie des Langages & Automates et Mathématiques de l'Ingénieur.
+Tu as accès à deux outils :
+- vector_search : pour chercher du contenu dans les documents de cours
+- math_explainer : pour chercher des notations formelles, formules, ou expressions symboliques
 
-Tu réponds UNIQUEMENT à partir du contexte fourni par les documents de cours.
-Si l'information n'est pas dans le contexte, dis-le clairement.
-Réponds en français. Sois précis et structuré.
-Termine toujours par une ligne "Sources :" listant les fichiers utilisés."""
+Règles importantes :
+- Utilise TOUJOURS un outil avant de répondre — ne réponds jamais de mémoire
+- Si une première recherche ne suffit pas, fais une deuxième recherche avec des termes différents
+- Si l'information n'est pas dans les documents, dis-le clairement
+- Réponds en français, de manière structurée et précise
+- Termine toujours par "Sources :" en listant les fichiers utilisés"""
 
 
-def decide_tool(question: str) -> str:
-    """Simple rule-based tool selection."""
-    math_keywords = ["formule", "calcul", "matrice", "vecteur", "déterminant",
-                     "eigenvalue", "noyau", "image", "base", "dimension"]
-    
-    question_lower = question.lower()
-    if any(kw in question_lower for kw in math_keywords):
-        return "math_explainer"
-    return "vector_search"
+def build_agent():
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        temperature=0,
+        api_key=os.getenv("GROQ_API_KEY"),
+    )
+
+    tools = [vector_search, math_explainer]
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", SYSTEM_PROMPT),
+        ("human", "{input}"),
+        ("placeholder", "{agent_scratchpad}"),
+    ])
+
+    agent = create_tool_calling_agent(llm, tools, prompt)
+
+    return AgentExecutor(
+        agent=agent,
+        tools=tools,
+        verbose=True,          # shows the agent's reasoning steps
+        max_iterations=4,      # prevents infinite loops
+        handle_parsing_errors=True,
+    )
+
+
+_agent_executor = None
 
 
 def run_agent(question: str) -> str:
-    # Step 1: decide which tool to use
-    tool = decide_tool(question)
-    
-    # Step 2: retrieve context
-    if tool == "math_explainer":
-        context = math_explainer(question)
-    else:
-        context = vector_search(question)
+    global _agent_executor
+    if _agent_executor is None:
+        _agent_executor = build_agent()
 
-    # Step 3: build prompt with context
-    user_prompt = f"""Contexte extrait des documents de cours :
-
-{context}
-
-Question : {question}"""
-
-    # Step 4: call Groq LLM
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0,
-    )
-
-    return response.choices[0].message.content
+    result = _agent_executor.invoke({"input": question})
+    return result["output"]
 
 
 if __name__ == "__main__":
-    print("=== RAG Study Assistant ===")
+    print("=== RAG Study Assistant (Agentic) ===")
     print("Tapez 'quit' pour quitter.\n")
 
     while True:
@@ -68,8 +78,8 @@ if __name__ == "__main__":
         if question.lower() in {"quit", "exit", "q"}:
             break
 
-        print("\nRecherche en cours...\n")
+        print()
         answer = run_agent(question)
-        print("--- Réponse ---")
+        print("\n--- Réponse finale ---")
         print(answer)
         print()
